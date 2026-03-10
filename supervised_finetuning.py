@@ -351,7 +351,8 @@ def main():
             f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
             + f" distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
         )
-
+    import pdb
+    pdb.set_strace()
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
@@ -503,6 +504,9 @@ def main():
                 if script_args.train_on_inputs:
                     labels += source_ids + target_ids + [tokenizer.eos_token_id]
                 else:
+                    # labels += [IGNORE_INDEX] * len(source_ids) - 用户问题部分不计算损失
+                    # labels += target_ids + [tokenizer.eos_token_id] - 只对模型回答部分计算损失
+                    # 只监督模型学习生成正确的回答
                     labels += [IGNORE_INDEX] * len(source_ids) + target_ids + [tokenizer.eos_token_id]
 
             input_ids_list.append(input_ids)
@@ -795,6 +799,7 @@ def main():
     else:
         raise ValueError(f"Error, model_name_or_path is None, SFT must be loaded from a pre-trained model")
 
+    # 只训练少量参数（lora_rank=8），大幅降低计算和内存需求
     if script_args.use_peft:
         logger.info("Fine-tuning method: LoRA(PEFT)")
 
@@ -822,6 +827,7 @@ def main():
                 modules_to_save = modules_to_save.split(',')
             logger.info(f"Peft target_modules: {target_modules}")
             logger.info(f"Peft lora_rank: {script_args.lora_rank}")
+            # 这是监督微调的标准任务类型 
             peft_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
                 target_modules=target_modules,
